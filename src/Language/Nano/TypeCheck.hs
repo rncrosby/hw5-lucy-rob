@@ -71,6 +71,7 @@ lookupTVar a ((v,t):xs)
 
 -- | Remove a type variable from a substitution
 removeTVar :: TVar -> Subst -> Subst
+removeTVar a [] = []
 removeTVar a ((v,t):xs)
   | a == v = xs
   | otherwise = (v,t) : removeTVar a xs
@@ -172,12 +173,11 @@ infer st _   (EBool _)         = (st, TBool)
 infer st gamma (EVar x)        = (InferState [] i, t)
   where
     (i,t) = instantiate 0 (lookupVarType x gamma)
-infer st gamma (ELam x body)   = 
+infer st gamma (ELam x body)   = (iBody, (apply (stSub iBody) fTV) :=> tBody)
   where
-    fTV       = freshTV 0
-    e'        = extendTypeEnv x (Forall [] fTV) gamma
-    (iB, tB)  = infer st e' body
-    u         = unify iB tB (apply (stSub iB) fTV)
+    fTV             = freshTV 0
+    gamma'          = extendTypeEnv x (Forall [] (Mono fTV)) gamma
+    (iBody, tBody)  = infer st gamma' body
 infer st gamma (EApp f e)    = (u, apply (stSub u) tO)
   where
     tO        = freshTV 0
