@@ -169,10 +169,28 @@ unify st a b = throw (Error "type error")
 infer :: InferState -> TypeEnv -> Expr -> (InferState, Type)
 infer st _   (EInt _)          = (st, TInt)
 infer st _   (EBool _)         = (st, TBool)
-infer st gamma (EVar x)        = error "e"
-infer st gamma (ELam x body)   = error "TBD: infer ELam"
-infer st gamma (EApp e1 e2)    = error "TBD: infer EApp"
-infer st gamma (ELet x e1 e2)  = error "TBD: infer ELet"
+infer st gamma (EVar x)        = (InferState [] i, t)
+  where
+    (i,t) = instantiate 0 (lookupVarType x gamma)
+infer st gamma (ELam x body)   = 
+  where
+    fTV       = freshTV 0
+    e'        = extendTypeEnv x (Forall [] fTV) gamma
+    (iB, tB)  = infer st e' body
+    u         = unify iB tB (apply (stSub iB) fTV)
+infer st gamma (EApp f e)    = (u, apply (stSub u) tO)
+  where
+    tO        = freshTV 0
+    (iF, tF)  = infer st gamma f
+    gamma'    = apply (stSub iF) gamma
+    (iE, tE)  = infer st gamma' e
+    u         = unify iE (apply (stSub iE) tF) (tE :=> tO)
+infer st gamma (ELet x e1 e2)  = infer st gamma'' e2
+  where
+    (iE1, tE1)  = infer st gamma e1 -- infer the type of e1
+    gamma'      = apply (stSub iE1) gamma
+    s1          = generalize gamma' tE1
+    gamma''     = extendTypeEnv x s1 gamma'
 infer st gamma (EBin op e1 e2) = infer st gamma asApp
   where
     asApp = EApp (EApp opVar e1) e2
@@ -185,14 +203,24 @@ infer st gamma ENil = infer st gamma (EVar "[]")
 
 -- | Generalize type variables inside a type
 generalize :: TypeEnv -> Type -> Poly
-generalize gamma t = error "t"
+generalize gamma t = generalizeFold t xs
+  where
+    ft = freeTVars t
+    fg = freeTVars gamma
+    xs = L.nub (ft L.\\ fg)
+
+generalizeFold :: Type -> [TVar] -> Poly
+generalizeFold t (x:xs)
+  | xs == [] = Forall x (Mono t)
+  | otherwise = Forall x (generalizeFold t xs)
     
 -- | Instantiate a polymorphic type into a mono-type with fresh type variables
 instantiate :: Int -> Poly -> (Int, Type)
-instantiate n 
+instantiate n t = instantiateHelper [] n t
 
-instantiateHelper :: InferState -> Poly -> InferState
-instantiateHelper st (Forall as t) =
+instantiateHelper :: Subst -> Int -> Poly -> (Int,Type)
+instantiateHelper sub n (Forall as t) = instantiateHelper ((zip [as] [freshTV n]) ++ sub) (n+1) t
+instantiateHelper sub n (Mono t) = (n, apply sub t)
 
 
       
@@ -200,16 +228,16 @@ instantiateHelper st (Forall as t) =
 preludeTypes :: TypeEnv
 preludeTypes =
   [ ("+",    Mono $ TInt :=> TInt :=> TInt)
-  , ("-",    error "TBD: -")
-  , ("*",    error "TBD: *")
-  , ("/",    error "TBD: /")
-  , ("==",   error "TBD: ==")
-  , ("!=",   error "TBD: !=")
-  , ("<",    error "TBD: <")
-  , ("<=",   error "TBD: <=")
-  , ("&&",   error "TBD: &&")
-  , ("||",   error "TBD: ||")
-  , ("if",   error "TBD: if")
+  , ("-",    Mono $ TInt :=> TInt :=> TInt)
+  , ("*",    Mono $ TInt :=> TInt :=> TInt)
+  , ("/",    Mono $ TInt :=> TInt :=> TInt)
+  , ("==",   Mono $ TBool :=> TBool :=> TBool)
+  , ("!=",   Mono $ TInt :=> TInt :=> TBool)
+  , ("<",    Mono $ TInt :=> TInt :=> TBool)
+  , ("<=",   Mono $ TInt :=> TInt :=> TBool)
+  , ("&&",   Mono $ TInt :=> TInt :=> TBool)
+  , ("||",   Mono $ TInt :=> TInt :=> TBool)
+  , ("if",   Mono $ TBool :=> TInt :=> TInt)
   -- lists: 
   , ("[]",   error "TBD: []")
   , (":",    error "TBD: :")
