@@ -35,7 +35,9 @@ instance HasTVars Type where
   -- freeTVars t     = error "TBD: type freeTVars"
   freeTVars (TVar name) = [ name ]
   freeTVars (TList t) = freeTVars t
-  freeTVars (i :=> x) = freeTVars i ++ freeTVars x
+  freeTVars (i :=> x)
+    | i /= x = freeTVars i ++ freeTVars x
+    | otherwise = freeTVars i
   freeTVars _ = []
 
 -- | Free type variables of a poly-type (remove forall-bound vars)
@@ -61,28 +63,36 @@ extendTypeEnv x s gamma = (x,s) : gamma
 -- | Lookup a type variable in a substitution;
 --   if not present, return the variable unchanged
 lookupTVar :: TVar -> Subst -> Type
+lookupTVar a [] = TVar a
 lookupTVar a ((v,t):xs)
   | v == a = t
-  | xs == [] = TInt
+  | xs == [] = TVar a
   | otherwise = lookupTVar a xs
 
 -- | Remove a type variable from a substitution
 removeTVar :: TVar -> Subst -> Subst
-removeTVar a sub = error "TBD: removeTVar"
+removeTVar a ((v,t):xs)
+  | a == v = xs
+  | otherwise = (v,t) : removeTVar a xs
      
 -- | Things to which type substitutions can be apply
 class Substitutable a where
   apply :: Subst -> a -> a
-  
+
 -- | Apply substitution to type
 instance Substitutable Type where  
   -- apply sub t         = error "TBD: type apply"
   apply _ TInt = TInt
   apply _ TBool = TBool
-
+  apply sub (TVar a) = lookupTVar a sub
+  apply sub (i :=> x) = apply sub i :=> apply sub x
+  apply sub (TList a) = TList (apply sub a)
+  
 -- | Apply substitution to poly-type
 instance Substitutable Poly where    
-  apply sub s         = error "TBD: poly apply"
+  -- apply sub s         = error "TBD: poly apply"
+  apply sub (Mono t) = Mono (apply sub t)
+  apply sub (Forall as t) = Forall as (apply (removeTVar as sub) t)
 
 -- | Apply substitution to (all poly-types in) another substitution
 instance Substitutable Subst where  
@@ -98,7 +108,9 @@ instance Substitutable TypeEnv where
       
 -- | Extend substitution with a new type assignment
 extendSubst :: Subst -> TVar -> Type -> Subst
-extendSubst sub a t = error "TBD: extendSubst"
+extendSubst sub a t = (a,apply sub t) : sub
+  -- where
+  --   sub' = apply sub [(a,t)]
       
 --------------------------------------------------------------------------------
 -- Problem 2: Unification
@@ -123,12 +135,32 @@ extendState (InferState sub n) a t = InferState (extendSubst sub a t) n
 -- | Unify a type variable with a type; 
 --   if successful return an updated state, otherwise throw an error
 unifyTVar :: InferState -> TVar -> Type -> InferState
-unifyTVar st a t = error "TBD: unifyTVar"
+unifyTVar st a t
+  | t == TVar a = st
+  | a `elem` freeTVars t = throw (Error ("type error: cannot unify " ++ a ++ " and " ++ (typeString t) ++ " (occurs check)"))
+  | otherwise = extendState st a t
+  -- | lookupTVar a (stSub st) = [] = 
+  -- |
     
 -- | Unify two types;
 --   if successful return an updated state, otherwise throw an error
 unify :: InferState -> Type -> Type -> InferState
-unify st t1 t2 = error "TBD: unify"
+unify st TInt TInt = st
+unify st TBool TBool = st
+unify st (TVar a) t = unifyTVar st a t
+unify st t (TVar a) = unifyTVar st a t
+unify st (t1 :=> t2) (t1' :=> t2') = InferState k 0
+  where
+    a = unify st t1 t1'
+    b = apply (stSub a) t2
+    c = apply (stSub a) t2'
+    d = unify st b c
+    k = stSub d ++ stSub a
+-- unify st (i :=> j) (i' :=> j') = b
+--   where
+--     a = unify st i j
+--     b = unify st (apply (stSub a) i') (apply (stSub a) j')
+unify st a b = throw (Error "type error")
 
 --------------------------------------------------------------------------------
 -- Problem 3: Type Inference
@@ -137,7 +169,7 @@ unify st t1 t2 = error "TBD: unify"
 infer :: InferState -> TypeEnv -> Expr -> (InferState, Type)
 infer st _   (EInt _)          = (st, TInt)
 infer st _   (EBool _)         = (st, TBool)
-infer st gamma (EVar x)        = error "TBD: infer EVar"
+infer st gamma (EVar x)        = error "e"
 infer st gamma (ELam x body)   = error "TBD: infer ELam"
 infer st gamma (EApp e1 e2)    = error "TBD: infer EApp"
 infer st gamma (ELet x e1 e2)  = error "TBD: infer ELet"
@@ -153,16 +185,16 @@ infer st gamma ENil = infer st gamma (EVar "[]")
 
 -- | Generalize type variables inside a type
 generalize :: TypeEnv -> Type -> Poly
-generalize gamma t = error "TBD: generalize"
--- generalize gamma t =  Forall unc t
---   where
---     tVarsT = freeTVars t -- compute types in argument
---     tVarsG = freeTVars gamma -- compute types in environment
---     unc = L.nub (tVarsT L.\\ tVarsG) -- compute unconstrained by using \\ operation on the list
+generalize gamma t = error "t"
     
 -- | Instantiate a polymorphic type into a mono-type with fresh type variables
 instantiate :: Int -> Poly -> (Int, Type)
-instantiate n s = error "TBD: instantiate"
+instantiate n 
+
+instantiateHelper :: InferState -> Poly -> InferState
+instantiateHelper st (Forall as t) =
+
+
       
 -- | Types of built-in operators and functions      
 preludeTypes :: TypeEnv
