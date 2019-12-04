@@ -71,7 +71,7 @@ lookupTVar a ((v,t):xs)
 
 -- | Remove a type variable from a substitution
 removeTVar :: TVar -> Subst -> Subst
-removeTVar a [] = []
+removeTVar _ [] = []
 removeTVar a ((v,t):xs)
   | a == v = xs
   | otherwise = (v,t) : removeTVar a xs
@@ -138,6 +138,7 @@ extendState (InferState sub n) a t = InferState (extendSubst sub a t) n
 unifyTVar :: InferState -> TVar -> Type -> InferState
 unifyTVar st a t
   | t == TVar a = st
+  | (lookupTVar a (stSub st)) == t = st
   | a `elem` freeTVars t = throw (Error ("type error: cannot unify " ++ a ++ " and " ++ (typeString t) ++ " (occurs check)"))
   | otherwise = extendState st a t
   -- | lookupTVar a (stSub st) = [] = 
@@ -157,10 +158,6 @@ unify st (t1 :=> t2) (t1' :=> t2') = InferState k 0
     c = apply (stSub a) t2'
     d = unify st b c
     k = stSub d ++ stSub a
--- unify st (i :=> j) (i' :=> j') = b
---   where
---     a = unify st i j
---     b = unify st (apply (stSub a) i') (apply (stSub a) j')
 unify st a b = throw (Error "type error")
 
 --------------------------------------------------------------------------------
@@ -207,9 +204,10 @@ generalize gamma t = generalizeFold t xs
   where
     ft = freeTVars t
     fg = freeTVars gamma
-    xs = L.nub (ft L.\\ fg)
+    xs = (ft L.\\ fg)
 
 generalizeFold :: Type -> [TVar] -> Poly
+generalizeFold t [] = Mono t
 generalizeFold t (x:xs)
   | xs == [] = Forall x (Mono t)
   | otherwise = Forall x (generalizeFold t xs)
@@ -235,12 +233,12 @@ preludeTypes =
   , ("!=",   Mono $ TInt :=> TInt :=> TBool)
   , ("<",    Mono $ TInt :=> TInt :=> TBool)
   , ("<=",   Mono $ TInt :=> TInt :=> TBool)
-  , ("&&",   Mono $ TInt :=> TInt :=> TBool)
-  , ("||",   Mono $ TInt :=> TInt :=> TBool)
-  , ("if",   Mono $ TBool :=> TInt :=> TInt)
+  , ("&&",   Mono $ TBool :=> TBool :=> TBool)
+  , ("||",   Mono $ TBool :=> TBool :=> TBool)
+  , ("if",   Forall "a" $ Mono $ "a" :=> "a")
   -- lists: 
-  , ("[]",   error "TBD: []")
-  , (":",    error "TBD: :")
-  , ("head", error "TBD: head")
-  , ("tail", error "TBD: tail")
+  , ("[]",   Mono $ TList "[]")
+  , (":",    Mono $ TList "l1" :=> TList "l2" :=> "l1 : l2")
+  , ("head", Mono $ TList "(x:xs)" :=> TVar "x")
+  , ("tail", Mono $ TList "(x:xs)" :=> TVar "xs")
   ]
