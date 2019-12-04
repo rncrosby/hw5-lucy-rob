@@ -138,11 +138,8 @@ extendState (InferState sub n) a t = InferState (extendSubst sub a t) n
 unifyTVar :: InferState -> TVar -> Type -> InferState
 unifyTVar st a t
   | t == TVar a = st
-  | (lookupTVar a (stSub st)) == t = st
   | a `elem` freeTVars t = throw (Error ("type error: cannot unify " ++ a ++ " and " ++ (typeString t) ++ " (occurs check)"))
-  | otherwise = extendState st a t
-  -- | lookupTVar a (stSub st) = [] = 
-  -- |
+  | otherwise = InferState [(a,t)] 1
     
 -- | Unify two types;
 --   if successful return an updated state, otherwise throw an error
@@ -151,6 +148,7 @@ unify st TInt TInt = st
 unify st TBool TBool = st
 unify st (TVar a) t = unifyTVar st a t
 unify st t (TVar a) = unifyTVar st a t
+-- unify st (l :=> r) (l' :=> r') = unify (unify st l l') (apply (stSub st) r) (apply (stSub st) r')
 unify st (t1 :=> t2) (t1' :=> t2') = InferState k 0
   where
     a = unify st t1 t1'
@@ -186,6 +184,13 @@ infer st gamma (EApp f e)    = (u, apply (stSub u) tO)
     (iE, tE)  = infer st gamma' e
     u         = unify iE (apply (stSub iE) tF) (tE :=> tO)
     newSt = InferState (stSub u) ((+) (stCnt u) 1) 
+-- infer st gamma (EApp f e)    = (newState, apply (stSub newState) ftv)
+--   where
+--     ftv = freshTV 0
+--     (su1, tF) = infer st gamma f
+--     gamma' = apply (stSub su1) gamma
+--     (su2, tEs) = infer su1 gamma' e
+--     newState = unify (apply (stSub su2) tF) (tEs :=> ftv)
 infer st gamma (ELet x e1 e2)  = infer iE1 gamma'' e2
   where
     (iE1, tE1)  = infer st gamma e1 -- infer the type of e1
