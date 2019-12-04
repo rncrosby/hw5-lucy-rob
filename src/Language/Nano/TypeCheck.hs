@@ -158,7 +158,7 @@ unify st (t1 :=> t2) (t1' :=> t2') = InferState k 0
     c = apply (stSub a) t2'
     d = unify st b c
     k = stSub d ++ stSub a
-unify st a b = throw (Error "type error")
+unify st a b = throw (Error ("type error: cannot unify " ++ (typeString a) ++ " and " ++ (typeString b) ++ " here"))
 
 --------------------------------------------------------------------------------
 -- Problem 3: Type Inference
@@ -169,25 +169,30 @@ infer st _   (EInt _)          = (st, TInt)
 infer st _   (EBool _)         = (st, TBool)
 infer st gamma (EVar x)        = (InferState [] i, t)
   where
-    (i,t) = instantiate 0 (lookupVarType x gamma)
+    (i,t) = instantiate (stCnt st) (lookupVarType x gamma)
 infer st gamma (ELam x body)   = (iBody, (apply (stSub iBody) fTV) :=> tBody)
   where
-    fTV             = freshTV 0
+    fTV             = freshTV (stCnt st)
+    newState = InferState (stSub st) ((+) (stCnt st) 1)
     gamma'          = extendTypeEnv x (Forall [] (Mono fTV)) gamma
-    (iBody, tBody)  = infer st gamma' body
+    (iBody, tBody)  = infer newState gamma' body
+    
+
 infer st gamma (EApp f e)    = (u, apply (stSub u) tO)
   where
-    tO        = freshTV 0
+    tO        = freshTV (stCnt st)
     (iF, tF)  = infer st gamma f
     gamma'    = apply (stSub iF) gamma
     (iE, tE)  = infer st gamma' e
     u         = unify iE (apply (stSub iE) tF) (tE :=> tO)
-infer st gamma (ELet x e1 e2)  = infer st gamma'' e2
+    newSt = InferState (stSub u) ((+) (stCnt u) 1) 
+infer st gamma (ELet x e1 e2)  = infer iE1 gamma'' e2
   where
     (iE1, tE1)  = infer st gamma e1 -- infer the type of e1
     gamma'      = apply (stSub iE1) gamma
     s1          = generalize gamma' tE1
     gamma''     = extendTypeEnv x s1 gamma'
+
 infer st gamma (EBin op e1 e2) = infer st gamma asApp
   where
     asApp = EApp (EApp opVar e1) e2
@@ -217,13 +222,9 @@ instantiate :: Int -> Poly -> (Int, Type)
 instantiate n t = instantiateHelper [] n t
 -- instantiate n (Forall as t)
 
-
-
 instantiateHelper :: Subst -> Int -> Poly -> (Int,Type)
 instantiateHelper sub n (Forall as t) = instantiateHelper ((zip [as] [freshTV n]) ++ sub) (n+1) t
 instantiateHelper sub n (Mono t) = (n, apply sub t)
-
-
       
 -- | Types of built-in operators and functions      
 preludeTypes :: TypeEnv
@@ -232,16 +233,16 @@ preludeTypes =
   , ("-",    Mono $ TInt :=> TInt :=> TInt)
   , ("*",    Mono $ TInt :=> TInt :=> TInt)
   , ("/",    Mono $ TInt :=> TInt :=> TInt)
-  , ("==",   forall "a" ("a" :=> "a" :=> TBool))
-  , ("!=",   forall "a" ("a" :=> "a" :=> TBool))
-  , ("<",    forall "a" ("a" :=> "a" :=> TBool))
-  , ("<=",   forall "a" ("a" :=> "a" :=> TBool))
-  , ("&&",   forall "a" ("a" :=> "a" :=> TBool))
-  , ("||",   forall "a" ("a" :=> "a" :=> TBool))
-  , ("if",   forall "a" ("a" :=> "a" :=> "a"))
+  , ("==",   forall "z1" ("z1" :=> "z1" :=> TBool))
+  , ("!=",   forall "z1" ("z1" :=> "z1" :=> TBool))
+  , ("<",    forall "z1" ("z1" :=> "z1" :=> TBool))
+  , ("<=",   forall "z1" ("z1" :=> "z1" :=> TBool))
+  , ("&&",   forall "z1" ("z1" :=> "z1" :=> TBool))
+  , ("||",   forall "z1" ("z1" :=> "z1" :=> TBool))
+  , ("if",   forall "z1" (TBool :=> "z1" :=> "z1"))
   -- lists:   
   , ("[]",  Mono $ TList "[]" :=> TList "[]")
-  , (":",   forall "a" ("a" :=> TList "a" :=> TList "a"))
-  , ("head", forall "a" (TList "a" :=> "a"))
-  , ("tail", forall "a" (TList "a" :=> "a"))
+  , (":",   forall "y1" ("y1" :=> TList "y1" :=> TList "y1"))
+  , ("head", forall "y1" (TList "y1" :=> "y1"))
+  , ("tail", forall "y1" (TList "y1" :=> "y1"))
   ]
