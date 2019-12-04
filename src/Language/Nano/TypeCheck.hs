@@ -215,6 +215,9 @@ generalizeFold t (x:xs)
 -- | Instantiate a polymorphic type into a mono-type with fresh type variables
 instantiate :: Int -> Poly -> (Int, Type)
 instantiate n t = instantiateHelper [] n t
+-- instantiate n (Forall as t)
+
+
 
 instantiateHelper :: Subst -> Int -> Poly -> (Int,Type)
 instantiateHelper sub n (Forall as t) = instantiateHelper ((zip [as] [freshTV n]) ++ sub) (n+1) t
@@ -229,16 +232,16 @@ preludeTypes =
   , ("-",    Mono $ TInt :=> TInt :=> TInt)
   , ("*",    Mono $ TInt :=> TInt :=> TInt)
   , ("/",    Mono $ TInt :=> TInt :=> TInt)
-  , ("==",   Mono $ TBool :=> TBool :=> TBool)
-  , ("!=",   Mono $ TInt :=> TInt :=> TBool)
-  , ("<",    Mono $ TInt :=> TInt :=> TBool)
-  , ("<=",   Mono $ TInt :=> TInt :=> TBool)
-  , ("&&",   Mono $ TBool :=> TBool :=> TBool)
-  , ("||",   Mono $ TBool :=> TBool :=> TBool)
-  , ("if",   Forall "a" $ Mono $ "a" :=> "a")
-  -- lists: 
-  , ("[]",   Mono $ TList "[]")
-  , (":",    Mono $ TList "l1" :=> TList "l2" :=> "l1 : l2")
-  , ("head", Mono $ TList "(x:xs)" :=> TVar "x")
-  , ("tail", Mono $ TList "(x:xs)" :=> TVar "xs")
+  , ("==",   forall "a" ("a" :=> "a" :=> TBool))
+  , ("!=",   forall "a" ("a" :=> "a" :=> TBool))
+  , ("<",    forall "a" ("a" :=> "a" :=> TBool))
+  , ("<=",   forall "a" ("a" :=> "a" :=> TBool))
+  , ("&&",   forall "a" ("a" :=> "a" :=> TBool))
+  , ("||",   forall "a" ("a" :=> "a" :=> TBool))
+  , ("if",   forall "a" ("a" :=> "a" :=> "a"))
+  -- lists:   
+  , ("[]",  Mono $ TList "[]" :=> TList "[]")
+  , (":",   forall "a" ("a" :=> TList "a" :=> TList "a"))
+  , ("head", forall "a" (TList "a" :=> "a"))
+  , ("tail", forall "a" (TList "a" :=> "a"))
   ]
